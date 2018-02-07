@@ -30,28 +30,37 @@ word_vectors = Word2Vec.load_word2vec_format('/Users/Dhanush/Desktop/Projects/Ad
 #print word_vectors.most_similar('television',topn=392)
 
 #Select 100 random word vectors
-random.seed(4674488)
-shuffle(vec)
-selected_100_vectors=vec[0:100]
+#random.seed(4674488)
+#shuffle(vec)
+#selected_100_vectors=vec[0:100]
 
-selected_100_vectors.sort()
+#selected_100_vectors.sort()
 
-print selected_100_vectors
+#print selected_100_vectors
+#out=word_vectors.most_similar('abacus',topn=392)
+#temp=[out[0],out[1],out[60],out[120],out[-5],out[-1]]
+#print temp
 
 #Get 5 classes to generare adversarial examples, Ideally two closest, two in the middle and two the farthest in cosine
 #Distance
 # We use gensim to accomplish this.
 selected_100_vectors_trails=[]
-for word in selected_100_vectors:
+selected_100_vectors=[]
+#for word in selected_100_vectors:
+for word in vec:
 	out=word_vectors.most_similar(word,topn=392)
-	temp=[out[0],out[1],out[60],out[120],out[-5],out[-1]]
-	selected_100_vectors_trails.append(temp)
-
-
+	print len(out)
+	temp=[out[0],out[80],out[160],out[240],out[320],out[-1]]
+	if out[0][1] > 0.547:
+		selected_100_vectors.append(word)
+		selected_100_vectors_trails.append(temp)
+print (selected_100_vectors)
+print len(selected_100_vectors_trails)
+print len(selected_100_vectors)
 #we have selected 6 words per each class for these 100 words.
 #Dump and save these as pickles.
 
-joblib.dump([selected_100_vectors,selected_100_vectors_trails],"/Users/Dhanush/Desktop/Projects/AdverserialStudy/Data/adversarialstudy_selected100_with6classes.pkl")
+#joblib.dump([selected_100_vectors,selected_100_vectors_trails],"/Users/Dhanush/Desktop/Projects/AdverserialStudy/Data/adversarialstudy_selected100_with6classes.pkl")
 
 
 

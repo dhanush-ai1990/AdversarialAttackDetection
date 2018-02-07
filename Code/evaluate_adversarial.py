@@ -10,14 +10,15 @@ import tensorflow.contrib.slim as slim
 import tensorflow.contrib.slim.nets as nets
 import PIL
 import numpy as np
-
+from shutil import copyfile
 
 import tempfile
 from urllib import urlretrieve
 import tarfile
 import os
 import json
-import matplotlib.pyplot as plt
+import os
+#import matplotlib.pyplot as plt
 
 
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -26,14 +27,21 @@ image = tf.Variable(tf.zeros((299, 299, 3)))
 
 
 def classify(img, correct_class=None, target_class=None):
-	fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 8))
-	fig.sca(ax1)
+	#fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 8))
+	#fig.sca(ax1)
 	p = sess.run(probs, feed_dict={image: img})[0]
-	ax1.imshow(img)
-	fig.sca(ax1)
+	#ax1.imshow(img)
+	#fig.sca(ax1)
 
-	topk = list(p.argsort()[-10:][::-1])
+	topk = list(p.argsort()[0:1000][::-1])
 	topprobs = p[topk]
+	#print topprobs
+	#print [imagenet_labels[i][:15] for i in topk]
+
+	#print len(topk)
+	#print len(topprobs)
+	return [topk,topprobs]
+	"""
 	barlist = ax2.bar(range(10), topprobs)
 	if target_class in topk:
 		barlist[topk.index(target_class)].set_color('r')
@@ -46,7 +54,7 @@ def classify(img, correct_class=None, target_class=None):
 		rotation='vertical')
 	fig.subplots_adjust(bottom=0.2)
 	plt.show()
-
+	"""
 #Load the Inception V3 Model
 def inception(image, reuse):
 	preprocessed = tf.multiply(tf.subtract(tf.expand_dims(image, 0), 0.5), 2.0)
@@ -97,11 +105,22 @@ for item in selected_word:
 mapping =joblib.load("/Users/Dhanush/Desktop/Projects/AdverserialStudy/Data/wnid_label_name_with_path.pkl")
 
 j=0
+#we bascially need information like 
+"""
+Original Class, Prediction probablity, Adverserial Class, cosine distance, Adverserial attack success ,Adverserial class probablity.
+
+Original Class predicted correctly ? No skip
+"""
+# We store the results in stats dictionary below with the original class as key
+stats ={}
 for classes in selected_word:
-	print classes
+	print j+1,classes
 	img_class=mapping[classes][0]
-	img_path=mapping[classes][2][0]
+	img_path=mapping[classes][2][1]
 	#img_class = 281
+	split_path=img_path.split('/')
+	#copyfile(img_path,'/Users/Dhanush/Desktop/Images/'+split_path[-1])
+	img_path='./Images/'+ split_path[-1]
 	img = PIL.Image.open(img_path)
 	big_dim = max(img.width, img.height)
 	wide = img.width > img.height
@@ -109,7 +128,16 @@ for classes in selected_word:
 	new_h = 299 if wide else int(img.height * 299 / img.width)
 	img = img.resize((new_w, new_h)).crop((0, 0, 299, 299))
 	img = (np.asarray(img) / 255.0).astype(np.float32)
-	classify(img, correct_class=img_class)
+
+	[topk,topprobs]=classify(img, correct_class=img_class)
+	# We will skip studying the class if its true prediction itself is wrong
+	truepred=topk[0]
+	#print ("true: ",truepred," actual: ",img_class)
+	if truepred !=img_class:
+		print ("skipping this class")
+		continue
+	stats[classes]=[]
+	stats[classes].append(topprobs[0])
 	x = tf.placeholder(tf.float32, (299, 299, 3))
 
 	x_hat = image # our trainable adversarial input
@@ -132,13 +160,16 @@ for classes in selected_word:
 	with tf.control_dependencies([projected]):
 		project_step = tf.assign(x_hat, projected)
 
-	for i in range(6):
-
+	for zz in range(6):
+		print zz+1
+		store_adv=[]
 		demo_epsilon = 2.0/255.0 # a really small perturbation
 		demo_lr = 1e-1
 		demo_steps = 100
-		adv_class= selected_adversarial_classes[j][i][0]
-		print (adv_class)
+		adv_class= selected_adversarial_classes[j][zz][0]
+		store_adv.append(adv_class)
+		#print (selected_adversarial_classes[j][zz][0],selected_adversarial_classes[j][zz][1])
+		store_adv.append(selected_adversarial_classes[j][zz][1])
 		#demo_target = 924 # "guacamole"
 		demo_target=mapping[adv_class][0]
 		# initialization step
@@ -152,16 +183,33 @@ for classes in selected_word:
 			feed_dict={learning_rate: demo_lr, y_hat: demo_target})
 		# project step
 		sess.run(project_step, feed_dict={x: img, epsilon: demo_epsilon})
-		if (i+1) % 10 == 0:
-			print('step %d, loss=%g' % (i+1, loss_value))
+		#if (i+1) % 10 == 0:
+		#	print('step %d, loss=%g' % (i+1, loss_value))
 
 		adv = x_hat.eval()
-		classify(adv, correct_class=img_class, target_class=demo_target)
-		break
-		J+=1
+		[topk,topprobs]=classify(adv, correct_class=img_class, target_class=demo_target)
+		#Check if the predicted class is the adverarial class, indicating a successful attack
+		sucess=False
+		if topk[0]==demo_target:
+			sucess=True
+		store_adv.append(sucess)
+
+		#Lets find the adversarial class probablity, if it is a successful class, then its going to be first
+		#probablity from the prediction.
+		if sucess:
+			store_adv.append(topprobs[0])
+		else:
+			for y in range(len(topk)):
+				if topk[y] == demo_target:
+					store_adv.append(topprobs[y])
+					break
+		stats[classes].append(store_adv)
 
 
 
 
 
+
+	j+=1
+joblib.dump(stats,"/Users/Dhanush/Desktop/Projects/AdverserialStudy/Data/stats_for_evaluate_adversarial.pkl")
 
